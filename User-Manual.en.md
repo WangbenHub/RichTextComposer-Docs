@@ -19,7 +19,8 @@ This manual is for users who have a **built, ready-to-use plugin** and work in t
 - [7. Typewriter](#7-typewriter)
 - [8. Function chips: concepts, candidates, runtime binding](#8-function-chips-concepts-candidates-runtime-binding)
 - [9. Subsystem and click events](#9-subsystem-and-click-events)
-- [10. FAQ](#10-faq)
+- [10. Localization template (REF) and `FText`](#10-localization-template-ref-and-ftext)
+- [11. FAQ](#11-faq)
 
 ---
 
@@ -309,7 +310,53 @@ Subsystem binding APIs for Instance chips are in [Section 8.4](#84-runtime-bindi
 
 ---
 
-## 10. FAQ
+## 10. Localization template (REF) and `FText`
+
+This section is the **user-facing** description of localization for `Rich Text Composer Document`. Use it with Unreal’s **Gather Text** / PO workflow on the **`LocalizedMarkupSource`** property when **`Use Localized Markup`** is enabled.
+
+### 10.1 What the two fields do
+
+| Field | Purpose |
+|-------|---------|
+| **Use Localized Markup** | When **true**, **Rich Text Composer Display** and the **Typewriter** take the current-culture string from **`LocalizedMarkupSource`** and merge it into a **copy** of the document: **plain text** for included segments comes from that `FText`; **layout, styles, chips, images, hyperlinks, and function chips** still come from **`Paragraphs`**. When **false**, only **`Paragraphs`** are used (no merge). |
+| **Localized Markup Source** | A single **`FText`** string built when you **OK** the modal editor. It is **sparse**: one **`{n:i}…{/n:i}`** segment per **plain Text** run that counts toward localization (see §10.2), including **empty** Text runs used for spacing at style/chip boundaries. Suitable for **Gather** as one entry per document property (per culture after import). |
+
+**Gather (Localization Dashboard):** Unreal only collects `FText` values that have a localization **identity** (namespace + key). The plugin assigns one when **Use Localized Markup** is on (stable per document field via an internal GUID). Your target’s **Gather from Packages → Include Path Wildcards** must cover the folder that contains the Blueprint or widget asset (for example `/Game/...`); otherwise nothing from that asset is gathered. After upgrading the plugin or enabling markup for the first time, **OK** the modal, **save** the asset, then run **Gather** again.
+
+### 10.2 What appears in the string (sparse template)
+
+The plugin walks your document in order (all paragraphs and runs). It **adds a segment** for each run that is:
+
+- **`Text`** type, and  
+- **Not** a **structural empty** anchor (the invisible runs the editor inserts for caret placement around chips; those never carry visible translated text).
+
+This **includes** runs whose **`TextContent` is empty** but are **not** structural anchors—those slots often represent **gaps** between colors or before/after inline chips. Translators may leave the body empty or insert **spaces** in a given culture so spacing matches that language’s typography.
+
+**Not** written into this string (they stay only in **`Paragraphs`**): **line breaks**, **images**, **hyperlinks**, **function chips**, and **structural empty** text anchors. **Dynamic text** returned by chips at runtime is localized **elsewhere** (your game data / other `FText` keys), not inside this field.
+
+### 10.3 Wire format (for translators)
+
+Segments are concatenated in order, each shaped like:
+
+**`{n:0}`** *body* **`{/n:0}`** **`{n:1}`** *body* **`{/n:1}`** …
+
+- **`i`** is the slot index: **0, 1, 2, …** counting **only** the `Text` runs that participate in the template (not every run in the document). A segment may have an **empty** body between **`{n:i}`** and **`{/n:i}`** when the authored document used an empty spacing run; you may fill it with spaces for a locale if needed.
+- **Body** is the translatable text. To put a literal **`{`** or **`}`** inside the body, write **`{{`** or **`}}`** (same idea as escaping braces in other formats).
+- There are **no** extra newline characters between paragraphs inside this string; paragraph breaks remain in the structured document.
+
+**Translators:** edit **only** the text **between** **`{n:i}`** and **`{/n:i}`**. Do **not** change the tags or the numbers **`i`**, and do not reorder segments, or the merge will fail and the UI will **fall back** to the authored **`Paragraphs`** text until the string is fixed or regenerated.
+
+### 10.4 Editor: Details and preview
+
+In **Details**, enable or disable **Use Localized Markup**, and expand **Localized template (REF v1, read-only)** to inspect the generated string. The **inline preview** uses the same merge path as runtime when the option is on, so changing the editor **Preview Language** (when available) should match in-game culture for this field.
+
+### 10.5 If something goes wrong
+
+If the stored string **does not parse** (wrong indices, extra characters, missing closing tags), the plugin **ignores** it for layout and uses **`Paragraphs`** until you open the **modal**, make a small edit if needed, and **OK** to **regenerate** a valid template.
+
+---
+
+## 11. FAQ
 
 **Q: Compile fails after copying into the project, or the editor asks to compile the plugin?**  
 A: Delete **`Binaries`** and **`Intermediate`** inside the plugin folder and reopen the project. Install **Visual Studio** with the C++ workload required by your engine. The engine **major** line must match the plugin listing (Fab / product page; `.uplugin` may omit **`EngineVersion`**).
